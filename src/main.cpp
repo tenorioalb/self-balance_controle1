@@ -9,13 +9,15 @@
 //================================================================
 
 // --- Pinos do Sensor IMU (MPU6050) ---
-// Estes são os pinos I2C padrão para a maioria das ESP32-S3
-// Se sua placa for diferente, ajuste aqui.
-#define I2C_SDA_PIN 8
-#define I2C_SCL_PIN 9
+// **ALTERADO:** Pinos I2C padrão da ESP32 DevKit clássica
+#define I2C_SDA_PIN 21
+#define I2C_SCL_PIN 22
 
 // --- Pinos da Ponte H (Ex: L298N ou TB6612FNG) ---
 // Motores N20 750RPM
+// Estes pinos (10-15) geralmente são seguros na DevKit.
+// Cuidado: O GPIO 12 é um pino de boot. Geralmente funciona
+// como saída PWM após o boot, mas se tiver problemas, troque-o.
 
 // Motor A (Direito)
 #define MOTOR_A_IN1 10 // Pino IN1 da Ponte H
@@ -58,9 +60,6 @@ double pid_setpoint = 0.0; // Setpoint (ponto de equilíbrio), 0 graus.
 double pid_input = 0.0;    // Entrada (ângulo atual do robô)
 double pid_output = 0.0;   // Saída (esforço de controle para os motores)
 
-// Direção do PID: DIRECT = se o erro for positivo, a saída aumenta
-// REVERSE = se o erro for positivo, a saída diminui.
-// Para um robô de auto-equilíbrio, geralmente usamos REVERSE.
 PID pid(&pid_input, &pid_output, &pid_setpoint, Kp, Ki, Kd, REVERSE);
 
 //================================================================
@@ -123,17 +122,16 @@ void calibrateGyro() {
 
 void setup() {
   Serial.begin(115200);
-  while (!Serial)
-    delay(10); // Espera o Serial (importante para S3 nativo)
-
-  Serial.println("Iniciando Robô de Auto-Equilíbrio...");
+  Serial.println("\nIniciando Robô de Auto-Equilíbrio...");
 
   // --- Inicializa I2C ---
+  // Passamos os pinos personalizados para o Wire.begin()
   Wire.begin(I2C_SDA_PIN, I2C_SCL_PIN);
 
   // --- Inicializa MPU6050 ---
   if (!mpu.begin()) {
     Serial.println("Falha ao encontrar MPU6050. Verifique as conexões!");
+    Serial.println("Verifique se SDA está no Pino 21 e SCL no Pino 22.");
     while (1)
       delay(10);
   }
@@ -184,14 +182,12 @@ void loop() {
   // --- Cálculo do Ângulo (Filtro Complementar) ---
 
   // 1. Ângulo pelo Acelerômetro (confiável a longo prazo)
-  // Usamos atan2 para calcular o ângulo de inclinação (pitch)
   angle_accel = atan2(a.acceleration.x, a.acceleration.z) * RAD_TO_DEG;
 
   // 2. Taxa de rotação pelo Giroscópio (confiável a curto prazo)
   float gyro_pitch_rate = g.gyro.y - gyro_pitch_rate_offset;
 
   // 3. Fusão com Filtro Complementar
-  // 98% do ângulo antigo (integrado do giroscópio) + 2% do ângulo novo (acelerômetro)
   angle_pitch = 0.98 * (angle_pitch + gyro_pitch_rate * dt) + 0.02 * (angle_accel);
 
   // --- Cálculo do PID ---
@@ -212,6 +208,4 @@ void loop() {
   // Serial.print(angle_pitch);
   // Serial.print("\t Output:");
   // Serial.println(pid_output);
-
-  // O PID já tem um tempo de amostragem, então não precisamos de delay aqui.
 }
